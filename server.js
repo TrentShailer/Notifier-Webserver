@@ -20,6 +20,28 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.set("trust proxy", 1);
 
+function GenerateApiID() {
+	var apiID = "";
+	var chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+	for (var i = 1; i <= 12; i++) {
+		var num = (Math.random() * 35).toFixed(0);
+		apiID += chars[num];
+		if (i % 4 === 0) apiID += "-";
+	}
+
+	apiID = apiID.substring(0, apiID.length - 1);
+	return apiID;
+}
+
+async function GetUserID(apiID) {
+	var result = await db.query(
+		"SELECT user_id FROM app_user WHERE user_api_id = $1",
+		[apiID]
+	);
+	return result;
+}
+
 app.post("/user/create", async (req, res) => {
 	var pushToken = req.body.pushToken;
 	var exists = await db.query(
@@ -29,16 +51,8 @@ app.post("/user/create", async (req, res) => {
 	if (exists.rowCount !== 0) {
 		return res.send({ apiID: exists.rows[0].user_api_id });
 	}
-	var chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-	var apiID = "";
+	var apiID = GenerateApiID();
 
-	for (var i = 1; i <= 12; i++) {
-		var num = (Math.random() * 35).toFixed(0);
-		apiID += chars[num];
-		if (i % 4 === 0) apiID += "-";
-	}
-
-	apiID = apiID.substring(0, apiID.length - 1);
 	var user_id = uuid.v4();
 
 	var result = await db.query(
@@ -52,7 +66,29 @@ app.post("/user/create", async (req, res) => {
 	}
 });
 
-app.post("/sender/create", async (req, res) => {});
+app.post("/sender/create", async (req, res) => {
+	var name = req.body.name;
+	var apiID = req.body.apiID;
+	var limitCheck = await db.query(
+		"SELECT sender_id FROM app_user INNER JOIN sender USING(user_id) WHERE user_api_id = $1 ;",
+		[apiID]
+	);
+	if (limitCheck.rowCount + 1 > 10) {
+		return res.send({ error: "Sender limit reached." });
+	}
+
+	var senderApiID = GenerateApiID();
+	var senderID = uuid.v4();
+	var user_id = await GetUserID(apiID);
+	if (user_id === -1 || user_id.rowCount === 0) {
+		return res.send({ error: "Failed to add sender" });
+	}
+	await db.query(
+		"INSERT INTO sender(sender_id, user_id, sender_api_id, sender_name) VALUES ($1, $2, $3, $4)",
+		[senderID, user_id.rows[0].user_id, senderApiID, name]
+	);
+	res.send({ apiID: senderApiID });
+});
 
 app.post("/sender/get/all", async (req, res) => {});
 
