@@ -10,6 +10,7 @@ var { Expo } = require("expo-server-sdk");
 
 // Initialise libraries
 var express = require("express");
+const { response } = require("express");
 var app = express();
 
 let expo = new Expo({});
@@ -42,28 +43,53 @@ async function GetUserID(apiID) {
 	return result;
 }
 
-app.post("/user/create", async (req, res) => {
-	var pushToken = req.body.pushToken;
-	var exists = await db.query(
-		"SELECT user_api_id FROM app_user WHERE pushToken = $1",
-		[pushToken]
+async function GetAllSenders(apiID) {
+	var senderQuery = await db.query(
+		"SELECT sender_api_id, sender_name, muted, offline_notification FROM app_user INNER JOIN sender USING(user_id) WHERE user_api_id = $1",
+		[apiID]
 	);
-	if (exists.rowCount !== 0) {
-		return res.send({ apiID: exists.rows[0].user_api_id });
+	if (senderQuery === -1)
+		return res.send({ error: "Failed to fetch senders" });
+	if (senderQuery.rowCount === 0) return res.send({ senders: [] });
+	var senders = [];
+	for (var i = 0; i < senderQuery.rowCount; i++) {
+		var row = senderQuery.rows[i];
+		senders.push({
+			apiID: row.sender_api_id,
+			name: row.sender_name,
+			muted: row.muted,
+			notifyIf: row.notifyIf,
+		});
 	}
+	return senders;
+}
+
+app.post("/user/create", async (req, res) => {
 	var apiID = GenerateApiID();
 
 	var user_id = uuid.v4();
 
 	var result = await db.query(
-		"INSERT INTO app_user(user_id, user_api_id, pushToken) VALUES ($1, $2, $3)",
-		[user_id, apiID, pushToken]
+		"INSERT INTO app_user(user_id, user_api_id) VALUES ($1, $2)",
+		[user_id, apiID]
 	);
 	if (result === -1) {
-		res.sendStatus(500);
+		res.send({ error: "Failed to create user" });
 	} else {
 		return res.send({ apiID: apiID });
 	}
+});
+
+app.post("/user/registerPushToken", async (req, res) => {
+	var pushToken = req.body.pushToken;
+	var apiID = req.body.apiID;
+	var result = await db.query(
+		"UPDATE app_user SET push_token = $1 WHERE user_api_id = $2",
+		[pushToken, apiID]
+	);
+	if (result === -1)
+		return res.send({ error: "Failed to register push token" });
+	return res.sendStatus(200);
 });
 
 app.post("/sender/create", async (req, res) => {
@@ -87,18 +113,62 @@ app.post("/sender/create", async (req, res) => {
 		"INSERT INTO sender(sender_id, user_id, sender_api_id, sender_name) VALUES ($1, $2, $3, $4)",
 		[senderID, user_id.rows[0].user_id, senderApiID, name]
 	);
-	res.send({ apiID: senderApiID });
+	var senders = await GetAllSenders(apiID);
+	res.send({ senders: senders });
 });
 
-app.post("/sender/get/all", async (req, res) => {});
+app.post("/sender/get/all", async (req, res) => {
+	var senders = await GetAllSenders(req.body.apiID);
+	return res.send({ senders: senders });
+});
 
 app.post("/sender/edit/mute", async (req, res) => {});
 
 app.post("/sender/edit/notify", async (req, res) => {});
 
-app.post("/sender/edit/rename", async (req, res) => {});
+app.post("/sender/edit/rename", async (req, res) => {
+	var senderApiID = req.body.senderApiID;
+	var name = req.body.name;
+	var apiID = req.body.apiID;
+	var validation = await db.query(
+		"SELECT sender_id FROM app_user INNER JOIN sender USING(user_id) WHERE user_api_id = $1 AND sender.sender_api_id = $2",
+		[apiID, senderApiID]
+	);
+	if (validation === -1 || validation.rowCount === 0) {
+		return res.send({
+			error: "You do not have permission to edit this sender",
+		});
+	}
+	var q = await db.query(
+		"UPDATE sender SET sender_name = $1 WHERE sender_api_id = $2",
+		[name, senderApiID]
+	);
+	if (q === -1) return res.send({ error: "Failed to update name" });
+	var senders = await GetAllSenders(apiID);
+	res.send({ senders: senders });
+});
 
-app.post("/sender/delete", async (req, res) => {});
+app.post("/sender/delete", async (req, res) => {
+	var apiID = req.body.apiID;
+	var senderApiID = req.body.senderApiID;
+
+	var validation = await db.query(
+		"SELECT sender_id FROM app_user INNER JOIN sender USING(user_id) WHERE user_api_id = $1 AND sender.sender_api_id = $2",
+		[apiID, senderApiID]
+	);
+	if (validation === -1 || validation.rowCount === 0) {
+		return res.send({
+			error: "You do not have permission to delete this sender",
+		});
+	}
+
+	var result = await db.query("DELETE FROM sender WHERE sender_api_id = $1", [
+		senderApiID,
+	]);
+	if (result === -1) return res.send({ error: "Failed to delete sender." });
+	var senders = await GetAllSenders(apiID);
+	res.send({ senders: senders });
+});
 
 app.post("/sender/get/messages/latest", async (req, res) => {});
 

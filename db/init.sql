@@ -1,7 +1,7 @@
 CREATE TABLE app_user (
 	user_id UUID PRIMARY KEY NOT NULL,
 	user_api_id VARCHAR UNIQUE NOT NULL,
-	pushToken VARCHAR
+	push_token VARCHAR DEFAULT null
 );
 
 CREATE TABLE sender (
