@@ -45,7 +45,7 @@ async function GetUserID(apiID) {
 
 async function GetAllSenders(apiID) {
 	var senderQuery = await db.query(
-		"SELECT sender_api_id, sender_name, muted, offline_notification FROM app_user INNER JOIN sender USING(user_id) WHERE user_api_id = $1",
+		"SELECT sender_api_id, sender_name, muted FROM app_user INNER JOIN sender USING(user_id) WHERE user_api_id = $1",
 		[apiID]
 	);
 	if (senderQuery === -1)
@@ -58,7 +58,6 @@ async function GetAllSenders(apiID) {
 			apiID: row.sender_api_id,
 			name: row.sender_name,
 			muted: row.muted,
-			notifyIf: row.notifyIf,
 		});
 	}
 	return senders;
@@ -138,28 +137,6 @@ app.post("/sender/edit/mute", async (req, res) => {
 	var q = await db.query(
 		"UPDATE sender SET muted = $1 WHERE sender_api_id = $2",
 		[muted, senderApiID]
-	);
-	if (q === -1) return res.send({ error: "Failed to update name" });
-	var senders = await GetAllSenders(apiID);
-	res.send({ senders: senders });
-});
-
-app.post("/sender/edit/notify", async (req, res) => {
-	var senderApiID = req.body.senderApiID;
-	var notifyIn = req.body.notifyIn;
-	var apiID = req.body.apiID;
-	var validation = await db.query(
-		"SELECT sender_id FROM app_user INNER JOIN sender USING(user_id) WHERE user_api_id = $1 AND sender.sender_api_id = $2",
-		[apiID, senderApiID]
-	);
-	if (validation === -1 || validation.rowCount === 0) {
-		return res.send({
-			error: "You do not have permission to edit this sender",
-		});
-	}
-	var q = await db.query(
-		"UPDATE sender SET offline_notification = $1 WHERE sender_api_id = $2",
-		[notifyIn, senderApiID]
 	);
 	if (q === -1) return res.send({ error: "Failed to update name" });
 	var senders = await GetAllSenders(apiID);

@@ -10,7 +10,6 @@ CREATE TABLE sender (
 	sender_api_id VARCHAR UNIQUE NOT NULL,
 	sender_name VARCHAR NOT NULL,
 	muted BOOLEAN DEFAULT false,
-	offline_notification INTEGER DEFAULT null,
 	CONSTRAINT fk_user_id FOREIGN KEY(user_id) REFERENCES app_user(user_id) ON DELETE CASCADE
 );
 
