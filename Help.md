@@ -1,16 +1,12 @@
 # Notifier Guide
 
--   ## [Overview](#Overview)
+-   ### [Overview](#Overview)
 
 -   ## Examples
 
     -   ### [Javascript Example](#Javascript)
 
     -   ### [NodeJS Example](#NodeJS)
-
-    -   ### [Python Example](#Python)
-
-    -   ### [C++/C Example](#C++/C)
 
 ## Overview
 
@@ -40,8 +36,6 @@ cURL -X POST -d targetApiID=####-####-#### -d senderApiID=####-####-#### -d mess
 ---
 
 ## Specific Examples
-
----
 
 ## Javascript
 
