@@ -4,7 +4,7 @@ var fs = require("fs");
 var path = require("path");
 var http = require("http");
 var db = require("./db/db.js");
-var dateFormat = require("dateformat");
+var { zonedTimeToUtc } = require("date-fns-tz");
 var uuid = require("uuid");
 var { Expo } = require("expo-server-sdk");
 
@@ -187,13 +187,83 @@ app.post("/sender/delete", async (req, res) => {
 	res.send({ senders: senders });
 });
 
-app.post("/sender/get/messages/latest", async (req, res) => {});
+app.post("/sender/get/homepage", async (req, res) => {
+	const apiID = req.body.apiID;
+	var senders = [];
+	var latestMessageQuery = await db.query(
+		"SELECT DISTINCT ON(message.sender_id) message_content, sent_time, seen, sender_api_id, sender_name FROM app_user INNER JOIN sender USING(user_id) INNER JOIN message USING(user_id) WHERE user_api_id=$1 ORDER BY message.sender_id, sent_time DESC;",
+		[apiID]
+	);
+	if (latestMessageQuery === -1)
+		return res.send({ error: "Failed to get senders" });
+	for (var i = 0; i < latestMessageQuery.rowCount; i++) {
+		senders.push({
+			apiID: latestMessageQuery.rows[i].sender_api_id,
+			name: latestMessageQuery.rows[i].sender_name,
+			message: {
+				message: latestMessageQuery.rows[i].message_content,
+				date: latestMessageQuery.rows[i].sent_time,
+				seen: latestMessageQuery.rows[i].seen,
+			},
+		});
+	}
+
+	var otherSendersQuery = await db.query(
+		"SELECT sender_id, sender_api_id, sender_name FROM app_user INNER JOIN sender USING(user_id) WHERE user_api_id=$1 AND sender_id NOT IN(SELECT sender_id FROM message);",
+		[apiID]
+	);
+	if (otherSendersQuery === -1)
+		return res.send({ error: "Failed to get senders" });
+	for (var i = 0; i < otherSendersQuery.rowCount; i++) {
+		senders.push({
+			apiID: otherSendersQuery.rows[i].sender_api_id,
+			name: otherSendersQuery.rows[i].sender_name,
+		});
+	}
+	res.send({ senders: senders });
+});
 
 app.post("/sender/get/messages/sender", async (req, res) => {});
 
 app.post("/send/message", async (req, res) => {
-	console.log(req.body);
+	var senderApiID = req.body.senderApiID;
+	var apiID = req.body.targetApiID;
+	var message = req.body.message;
+	var notify = req.body.notify;
+	var nowUtc = zonedTimeToUtc(Date.now(), "Pacific/Auckland");
+
+	var validation = await db.query(
+		"SELECT sender_id, user_id, push_token FROM app_user INNER JOIN sender USING(user_id) WHERE user_api_id = $1 AND sender.sender_api_id=$2",
+		[apiID, senderApiID]
+	);
+	if (validation === -1) return res.sendStatus(500);
+	if (validation.rowCount === 0) return res.sendStatus(400);
+
+	var user_id = validation.rows[0].user_id;
+	var sender_id = validation.rows[0].sender_id;
+	var push_token = validation.rows[0].pushToken;
+
+	var insertQuery = await db.query(
+		"INSERT INTO message(message_content, user_id, sender_id, sent_time) VALUES($1, $2, $3, $4)",
+		[message, user_id, sender_id, nowUtc]
+	);
+	if (insertQuery === -1) return res.sendStatus(500);
+
 	res.sendStatus(200);
+});
+
+app.post("/message/seen", async (req, res) => {
+	const senderApiID = req.body.senderApiID;
+	var senderID = await db.query(
+		"SELECT sender_id FROM sender WHERE sender_api_id = $1",
+		[senderApiID]
+	);
+	if (senderID === -1 || senderID.rowCount === 0) return res.send(200);
+	await db.query(
+		"UPDATE message SET seen=true WHERE sender_id = $1",
+		senderID.rows[0].sender_id
+	);
+	res.send(200);
 });
 
 httpServer.listen(3005);
