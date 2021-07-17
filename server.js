@@ -191,7 +191,7 @@ app.post("/sender/get/homepage", async (req, res) => {
 	const apiID = req.body.apiID;
 	var senders = [];
 	var latestMessageQuery = await db.query(
-		"SELECT DISTINCT ON(message.sender_id) message_content, sent_time, seen, sender_api_id, sender_name FROM app_user INNER JOIN sender USING(user_id) INNER JOIN message USING(user_id) WHERE user_api_id=$1 ORDER BY message.sender_id, sent_time DESC;",
+		"SELECT DISTINCT ON(message.sender_id) message_content, sent_time, seen, sender_api_id, sender_name FROM app_user INNER JOIN message USING(user_id) INNER JOIN sender USING(sender_id) WHERE user_api_id=$1 AND sender.sender_id IN(SELECT sender_id FROM message) ORDER BY message.sender_id, sent_time DESC;",
 		[apiID]
 	);
 	if (latestMessageQuery === -1)
@@ -220,6 +220,7 @@ app.post("/sender/get/homepage", async (req, res) => {
 			name: otherSendersQuery.rows[i].sender_name,
 		});
 	}
+	console.log(senders);
 	res.send({ senders: senders });
 });
 
