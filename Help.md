@@ -18,13 +18,11 @@ In order to send a push notification, the webserver needs to receive a POST requ
 
 This POST request must contain:
 
-```json
-{
+```text
 	targetApiID: (String)<User ID>
 	senderApiID: (String)<Sender ID>
 	message: (String)<Message body>
 	notify: (Optional Any)<If present send a push notification>
-}
 ```
 
 For Example via cURL
