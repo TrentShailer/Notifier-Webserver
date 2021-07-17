@@ -3,9 +3,6 @@
 -   ### [Overview](#Overview)
 
 -   ## Examples
-
-    -   ### [Javascript Example](#Javascript)
-
     -   ### [NodeJS Example](#NodeJS)
 
 ## Overview
@@ -34,45 +31,6 @@ cURL -X POST -d targetApiID=####-####-#### -d senderApiID=####-####-#### -d mess
 ---
 
 ## Specific Examples
-
-## Javascript
-
-No libraries
-
-```javascript
-var xhr = new XMLHttpRequest();
-xhr.open("POST", "http://notification.trentshailer.com/send/message");
-xhr.setRequestHeader("Accept", "application/json");
-xhr.setRequestHeader("Content-Type", "application/json");
-
-xhr.onreadystatechange = function () {
-	if (xhr.readyState === 4) {
-		// Handle errors
-	}
-};
-
-var data = {
-	targetApiID: "####-####-####",
-	senderApiID: "####-####-####",
-	message: "Example javascript usage",
-	notify: true,
-};
-
-xhr.send(data);
-```
-
-jQuery Ajax
-
-```javascript
-$.post("http://notification.trentshailer.com/send/message", {
-	targetApiID: "####-####-####",
-	senderApiID: "####-####-####",
-	message: "Example javascript usage",
-	notify: true,
-});
-```
-
----
 
 ## NodeJS
 
