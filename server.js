@@ -191,6 +191,9 @@ app.post("/sender/get/messages/latest", async (req, res) => {});
 
 app.post("/sender/get/messages/sender", async (req, res) => {});
 
-app.post("/send/message", async (req, res) => {});
+app.post("/send/message", async (req, res) => {
+	console.log(req.body);
+	res.sendStatus(200);
+});
 
 httpServer.listen(3005);
