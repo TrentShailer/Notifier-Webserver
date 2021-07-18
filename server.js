@@ -265,6 +265,18 @@ app.post("/sender/get/messages/sender", async (req, res) => {
 	res.send({ messages: messages });
 });
 
+app.post("/user/verify", async (req, res) => {
+	var apiID = req.body.apiID;
+	var account = await db.query(
+		"SELECT user_id FROM app_user WHERE user_api_id=$1",
+		[apiID]
+	);
+	if (account === -1) return res.sendStatus(500);
+	if (account.rowCount === 0)
+		return res.send({ error: "Account doesn't exist" });
+	return res.send(200);
+});
+
 app.post("/send/message", async (req, res) => {
 	var senderApiID = req.body.senderApiID;
 	var apiID = req.body.targetApiID;
@@ -273,7 +285,7 @@ app.post("/send/message", async (req, res) => {
 	var nowUtc = zonedTimeToUtc(Date.now(), "Pacific/Auckland");
 
 	var validation = await db.query(
-		"SELECT sender_id, user_id, push_token FROM app_user INNER JOIN sender USING(user_id) WHERE user_api_id = $1 AND sender.sender_api_id=$2",
+		"SELECT sender_id, user_id, push_token, muted FROM app_user INNER JOIN sender USING(user_id) WHERE user_api_id = $1 AND sender.sender_api_id=$2",
 		[apiID, senderApiID]
 	);
 	if (validation === -1) return res.sendStatus(500);
@@ -281,13 +293,37 @@ app.post("/send/message", async (req, res) => {
 
 	var user_id = validation.rows[0].user_id;
 	var sender_id = validation.rows[0].sender_id;
-	var push_token = validation.rows[0].pushToken;
+	var push_token = validation.rows[0].push_token;
 
 	var insertQuery = await db.query(
 		"INSERT INTO message(message_content, user_id, sender_id, sent_time) VALUES($1, $2, $3, $4)",
 		[message, user_id, sender_id, nowUtc]
 	);
 	if (insertQuery === -1) return res.sendStatus(500);
+
+	if (!validation.rows[0].muted && notify) {
+		let messages = [];
+
+		messages.push({
+			to: push_token,
+			title: "Notifer",
+			sound: "default",
+			body: message,
+		});
+
+		let chunks = expo.chunkPushNotifications(messages);
+
+		(async () => {
+			for (let chunk of chunks) {
+				try {
+					let receipts = await expo.sendPushNotificationsAsync(chunk);
+					console.log(receipts);
+				} catch (error) {
+					console.error(error);
+				}
+			}
+		})();
+	}
 
 	res.sendStatus(200);
 });
