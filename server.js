@@ -50,7 +50,7 @@ async function GetAllSenders(apiID) {
 	);
 	if (senderQuery === -1)
 		return res.send({ error: "Failed to fetch senders" });
-	if (senderQuery.rowCount === 0) return res.send({ senders: [] });
+	if (senderQuery.rowCount === 0) return [];
 	var senders = [];
 	for (var i = 0; i < senderQuery.rowCount; i++) {
 		var row = senderQuery.rows[i];
@@ -220,11 +220,50 @@ app.post("/sender/get/homepage", async (req, res) => {
 			name: otherSendersQuery.rows[i].sender_name,
 		});
 	}
-	console.log(senders);
 	res.send({ senders: senders });
 });
 
-app.post("/sender/get/messages/sender", async (req, res) => {});
+app.post("/sender/get/messages/sender", async (req, res) => {
+	const apiID = req.body.apiID;
+	const senderApiID = req.body.senderApiID;
+
+	var validation = await db.query(
+		"SELECT sender_id FROM app_user INNER JOIN sender USING(user_id) WHERE user_api_id = $1 AND sender.sender_api_id = $2",
+		[apiID, senderApiID]
+	);
+	if (validation === -1 || validation.rowCount === 0) {
+		return res.send({
+			error: "You do not have permission to view this sender",
+		});
+	}
+
+	var senderID = await db.query(
+		"SELECT sender_id FROM sender WHERE sender_api_id = $1",
+		[senderApiID]
+	);
+	if (senderID === -1 || senderID.rowCount === 0)
+		return res.send({ error: "Failed to fetch sender." });
+	await db.query("UPDATE message SET seen=true WHERE sender_id = $1", [
+		senderID.rows[0].sender_id,
+	]);
+
+	var fetchMessage = await db.query(
+		"SELECT message_id, message_content, sent_time FROM message WHERE sender_id=$1 ORDER BY sent_time ASC",
+		[senderID.rows[0].sender_id]
+	);
+	if (fetchMessage === -1)
+		return res.send({ error: "Failed to fetch messages" });
+	var messages = [];
+	for (var i = 0; i < fetchMessage.rowCount; i++) {
+		var row = fetchMessage.rows[i];
+		messages.push({
+			message: row.message_content,
+			sentTime: row.sent_time,
+			id: row.message_id,
+		});
+	}
+	res.send({ messages: messages });
+});
 
 app.post("/send/message", async (req, res) => {
 	var senderApiID = req.body.senderApiID;
@@ -251,20 +290,6 @@ app.post("/send/message", async (req, res) => {
 	if (insertQuery === -1) return res.sendStatus(500);
 
 	res.sendStatus(200);
-});
-
-app.post("/message/seen", async (req, res) => {
-	const senderApiID = req.body.senderApiID;
-	var senderID = await db.query(
-		"SELECT sender_id FROM sender WHERE sender_api_id = $1",
-		[senderApiID]
-	);
-	if (senderID === -1 || senderID.rowCount === 0) return res.send(200);
-	await db.query(
-		"UPDATE message SET seen=true WHERE sender_id = $1",
-		senderID.rows[0].sender_id
-	);
-	res.send(200);
 });
 
 httpServer.listen(3005);
